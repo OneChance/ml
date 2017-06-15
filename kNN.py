@@ -3,6 +3,8 @@
 
 from numpy import *
 import operator
+import matplotlib
+import matplotlib.pyplot as plt
 
 '''
 inX:待分类元素
@@ -44,4 +46,71 @@ def createDataSet():
 
 _group, _labels = createDataSet()
 
-print classify0([0, 0], _group, _labels, 3)
+
+# 从文件中读取数据并分析
+def file2matrix(filename):
+    fr = open(filename)
+    arrayOLines = fr.readlines()
+    numberOfLines = len(arrayOLines)
+    returnMat = zeros((numberOfLines, 3))
+    classLabelVector = []
+    index = 0
+    for line in arrayOLines:
+        line = line.strip()
+        listFromLine = line.split('\t')
+        returnMat[index:] = listFromLine[0:3]
+        classLabelVector.append(int(listFromLine[-1]))
+        index += 1
+    return returnMat, classLabelVector
+
+
+# 归一化特征值
+def autoNorm(dataSet):
+    # 获得每一列最小值
+    _minVals = dataSet.min(0)
+    # 获得每一列最大值
+    maxVals = dataSet.max(0)
+    _ranges = maxVals - _minVals
+    m = dataSet.shape[0]
+    # 每一个元素减去最小值
+    normDataSet = dataSet - tile(_minVals, (m, 1))
+    # 每一个元素除以差值
+    normDataSet = normDataSet / tile(_ranges, (m, 1))
+    return normDataSet, _ranges, _minVals
+
+
+# 测试
+def test():
+    hoRatio = 0.1
+    timeMat, typeLabels = file2matrix('knndata.txt')
+    normMat, ranges, minVals = autoNorm(timeMat)
+    m = normMat.shape[0]
+    numTestVecs = int(m * hoRatio)
+    errorCount = 0.0
+    for i in range(numTestVecs):
+        classifierResult = classify0(normMat[i, :], normMat[numTestVecs:m, :], typeLabels, 10)
+        print "type is:", classifierResult
+        if classifierResult != typeLabels[i]:
+            errorCount += 1
+    print "error rate is:", (errorCount / float(numTestVecs))
+
+
+# 分类函数
+def classifyPerson():
+    resultList = ['喜欢', '没啥感觉', '讨厌']
+    sportInWeek = int(raw_input("一周运动几小时?"))
+    gameInWeek = int(raw_input("一周玩电脑游戏几小时?"))
+    readInWeek = int(raw_input("一周读书几小时?"))
+    timeMat, typeLabels = file2matrix('knndata.txt')
+    normMat, ranges, minVals = autoNorm(timeMat)
+    inArr = array([sportInWeek, gameInWeek, readInWeek])
+    classifierResult = classify0((inArr - minVals) / ranges, normMat, typeLabels, 10)
+    print resultList[classifierResult - 1]
+
+
+classifyPerson()
+
+# fig = plt.figure()
+# ax = fig.add_subplot(111)
+# ax.scatter(normMat[:, 1], normMat[:, 2], 15.0 * array(typeLabel), 15.0 * array(typeLabel))
+# plt.show()
