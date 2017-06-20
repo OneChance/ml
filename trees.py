@@ -3,6 +3,7 @@
 
 from math import log
 import operator
+import treePlotter
 
 
 def createDataSet():
@@ -92,4 +93,5 @@ def createTree(_dataSet, _labels):
 
 dataSet, labels = createDataSet()
 myTree = createTree(dataSet, labels)
-print myTree
+
+treePlotter.createPlot(myTree)
