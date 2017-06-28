@@ -4,6 +4,7 @@
 from math import log
 import operator
 import treePlotter
+import pickle
 
 
 def createDataSet():
@@ -69,14 +70,15 @@ def chooseBestFeatureToSplit(_dataSet):
     return bestFeature
 
 
-def createTree(_dataSet, _labels):
+def createTree(_dataSet, labels, _nodeLabels, _midLabels):
+    _labels = labels[:]
     classList = [example[-1] for example in _dataSet]
     # 如果集合中所有样本的分类一样,返回这个分类
     if classList.count(classList[0]) == len(classList):
-        return classList[0]
+        return _nodeLabels[int(classList[0]) - 1]
     # 如果数据集中只剩下一列(分类标签列),那么将没有特征可用于划分,所以返回出现次数最多的那个分类
     if len(_dataSet[0]) == 1:
-        return majorityCnt(classList)
+        return _nodeLabels[int(majorityCnt(classList)) - 1]
     # 选出此轮最好的划分特征
     bestFeat = chooseBestFeatureToSplit(_dataSet)
     bestFeatLabel = _labels[bestFeat]
@@ -87,11 +89,56 @@ def createTree(_dataSet, _labels):
     # 该特征有多少种可能的取值,就划分为多少个子树,每个子树的数据集合,即是_dataSet中特征等于value的样本集合
     for value in uniqueVals:
         subLabels = _labels[:]
-        _myTree[bestFeatLabel][value] = createTree(splitDataSet(_dataSet, bestFeat, value), subLabels)
+        _myTree[bestFeatLabel][_midLabels[bestFeatLabel][value]] = createTree(splitDataSet(_dataSet, bestFeat, value),
+                                                                              subLabels, _nodeLabels,
+                                                                              _midLabels)
     return _myTree
 
 
-dataSet, labels = createDataSet()
-myTree = createTree(dataSet, labels)
+# 分类函数
+def classify(inputTree, featLables, testVec):
+    firstStr = inputTree.keys()[0]
+    secondDict = inputTree[firstStr]
+    featIndex = featLables.index(firstStr)
+    for key in secondDict.keys():
+        if testVec[featIndex] == key:
+            if type(secondDict[key]).__name__ == 'dict':
+                classLabel = classify(secondDict[key], featLables, testVec)
+            else:
+                classLabel = secondDict[key]
+    return classLabel
 
-treePlotter.createPlot(myTree)
+
+def storeTree(inputTree, filename):
+    fw = open(filename, 'w')
+    pickle.dump(inputTree, fw)
+    fw.close()
+
+
+def grabTree(filename):
+    fr = open(filename)
+    return pickle.load(fr)
+
+
+# dataSet, labels = createDataSet()
+# tree = {}
+
+# try:
+#    tree = grabTree('treeclassify.txt')
+# except Exception:
+#    tree = createTree(dataSet, labels)
+#    storeTree(tree, 'treeclassify.txt')
+
+# treePlotter.createPlot(myTree)
+# print classify(tree, labels, [1, 0])
+# print classify(tree, labels, [1, 1])
+
+fr = open('lenses.txt')
+lenses = [inst.strip().split('\t') for inst in fr.readlines()]
+lensesLabels = ['age', 'prescript', 'astigmatic', 'tearRate']
+nodeLabels = ['hard', 'soft', 'no lenses']
+midLabels = {'tearRate': {'1': 'reduced', '2': 'normal'}, 'astigmatic': {'1': 'no', '2': 'yes'},
+             'prescript': {'1': 'myope', '2': 'hypermetrope'}, 'age': {'1': 'young', '2': 'pre', '3': 'presbyopic'}}
+lensesTree = createTree(lenses, lensesLabels, nodeLabels, midLabels)
+
+treePlotter.createPlot(lensesTree)
