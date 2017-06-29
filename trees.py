@@ -116,8 +116,8 @@ def storeTree(inputTree, filename):
 
 
 def grabTree(filename):
-    fr = open(filename)
-    return pickle.load(fr)
+    _fr = open(filename)
+    return pickle.load(_fr)
 
 
 # dataSet, labels = createDataSet()
