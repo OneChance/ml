@@ -34,6 +34,15 @@ def setOfWords2Vec(vocabList, inputSet):
     return returnVec
 
 
+# 词袋模型,累计单词出现次数
+def bagOfWord2Vec(vocabList, inputSet):
+    returnVec = [0] * len(vocabList)
+    for word in inputSet:
+        if word in vocabList:
+            returnVec[vocabList.index(word)] += 1
+    return returnVec
+
+
 def trainNB0(trainMatrix, trainCategory):
     numTrainDocs = len(trainMatrix)
     numWords = len(trainMatrix[0])
@@ -72,17 +81,26 @@ def classifyNB(vec2Classify, p0Vec, p1Vec, pClass1):
         return 0
 
 
-_postingList, _classVec = loadDataSet()
-_vocabList = createVocabList(_postingList)
+# 文本解析器
+def textParse(bigString):
+    import re
+    listOfTokens = re.split(r'\W*', bigString)
+    return [tok.lower() for tok in listOfTokens if len(tok) > 2]
 
-trainMat = []
-for postinDoc in _postingList:
-    trainMat.append(setOfWords2Vec(_vocabList, postinDoc))
 
-p0V, p1V, pAb = trainNB0(trainMat, _classVec)
+# _postingList, _classVec = loadDataSet()
+# _vocabList = createVocabList(_postingList)
+
+# trainMat = []
+# for postinDoc in _postingList:
+#    trainMat.append(setOfWords2Vec(_vocabList, postinDoc))
+
+# 0V, p1V, pAb = trainNB0(trainMat, _classVec)
 
 # testEntry = ['love', 'my', 'dalmation']
-testEntry = ['stupid', 'garbage']
-thisDoc = array(setOfWords2Vec(_vocabList, testEntry))
+# testEntry = ['stupid', 'garbage']
+# thisDoc = array(setOfWords2Vec(_vocabList, testEntry))
 
-print testEntry, 'classified as ', classifyNB(thisDoc, p0V, p1V, pAb)
+# print testEntry, 'classified as ', classifyNB(thisDoc, p0V, p1V, pAb)
+
+print textParse('hello world! why so serious?')
