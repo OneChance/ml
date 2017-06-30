@@ -1,6 +1,7 @@
 # -*- coding:utf-8 -*-
 # 朴素贝叶斯Demo
 from numpy import *
+import feedparser
 
 
 def loadDataSet():
@@ -29,8 +30,8 @@ def setOfWords2Vec(vocabList, inputSet):
     for word in inputSet:
         if word in vocabList:
             returnVec[vocabList.index(word)] = 1
-        else:
-            print "this word:%s is not in my vocabulary!" % word
+            # else:
+    # print "this word:%s is not in my vocabulary!" % word
     return returnVec
 
 
@@ -68,8 +69,8 @@ def trainNB0(trainMatrix, trainCategory):
 
 
 def classifyNB(vec2Classify, p0Vec, p1Vec, pClass1):
-    # vec2Classify是经过setOfWords2Vec处理过后的向量,出现单词的位置上为1,
-    # 与p1Vec相乘后,为1的位置计算得到该单词出现的概率,因为p1Vec中的概率都做了对数计算,
+    # vec2Classify是经过setOfWords2Vec处理过后的向量,出现单词的位置上为1(如果是词袋模型,位置上是单词出现次数),
+    # 与p1Vec相乘,为1的位置作计算:1*p(wN),即得到该单词出现的概率,因为p1Vec中的概率都做了对数计算,
     # 所以此时的加法运算相当于原先的乘法运算,此处实际是计算:p(w|c1)p(c1),
     # 其中由于假设每个单词具有独立特征,p(w|c1) = p(w0|c1)p(w1|c1)...p(wN|c1)
     # 此处对于公式中的分母p(w)忽略计算,因为只要比较分子大小即可
@@ -103,4 +104,61 @@ def textParse(bigString):
 
 # print testEntry, 'classified as ', classifyNB(thisDoc, p0V, p1V, pAb)
 
-print textParse('hello world! why so serious?')
+# 查找所有文档中出现的高频词
+def calcMostFreq(vocabList, fullText):
+    import operator
+    freqDict = {}
+    for token in vocabList:
+        freqDict[token] = fullText.count(token)
+    sortedFreq = sorted(freqDict.iteritems(), key=operator.itemgetter(1), reverse=True)
+    return sortedFreq[:30]
+
+
+def localWords(feed1, feed0):
+    docList = []
+    classList = []
+    fullText = []
+    minLen = min(len(feed1['entries']), len(feed0['entries']))
+    for i in range(minLen):
+        wordList = textParse(feed1['entries'][i]['summary'])
+        docList.append(wordList)
+        fullText.extend(wordList)
+        classList.append(1)
+        wordList = textParse(feed0['entries'][i]['summary'])
+        docList.append(wordList)
+        fullText.extend(wordList)
+        classList.append(0)
+    vocabList = createVocabList(docList)
+    top30Words = calcMostFreq(vocabList, fullText)
+    # 移除高频词,因为这些词多为冗余和结构辅助性词语,也可参考停用词表
+    for pairW in top30Words:
+        if pairW[0] in vocabList:
+            vocabList.remove(pairW[0])
+    trainingSet = range(2 * minLen)
+    testSet = []
+    # 随机抽取20个样本作为测试样本
+    for i in range(20):
+        randIndex = int(random.uniform(0, len(trainingSet)))
+        testSet.append(trainingSet[randIndex])
+        del (trainingSet[randIndex])
+    trainMat = []
+    trainClasses = []
+    for docIndex in trainingSet:
+        trainMat.append(bagOfWord2Vec(vocabList, docList[docIndex]))
+        trainClasses.append(classList[docIndex])
+    p0V, p1V, pSpam = trainNB0(array(trainMat), array(trainClasses))
+    errorCount = 0
+    for docIndex in testSet:
+        # 书上此处使用的是词袋模型,不明白为什么,感觉在分类的时候只需要用0的位置剔除不需要计算的概率数据,
+        # 而使用1来保留需要计算的概率.
+        wordVector = setOfWords2Vec(vocabList, docList[docIndex])
+        if classifyNB(array(wordVector), p0V, p1V, pSpam) != classList[docIndex]:
+            errorCount += 1
+    print 'error rate is :', float(errorCount) / len(testSet)
+    return vocabList, p0V, p1V
+
+
+ny = feedparser.parse('http://newyork.craigslist.org/stp/index.rss')
+sf = feedparser.parse('http://sfbay.craigslist.org/stp/index.rss')
+
+localWords(ny, sf)
