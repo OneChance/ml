@@ -37,10 +37,41 @@ def gradAscent(dataMatIn, classLabels):
     return weights
 
 
+# 随机梯度上升算法
+def stocGradAscent0(dataMatIn, classLabels):
+    m, n = shape(dataMatIn)
+    alpha = 0.01
+    weights = ones(n)
+    for i in range(m):
+        # 此处sum只是把计算得到的一个元素的向量转换为数字
+        h = sigmoid(sum(dataMatIn[i] * weights))
+        error = classLabels[i] - h
+        weights = weights + alpha * error * dataMatIn[i]
+    return weights
+
+
+# 改进的随机梯度上升算法
+def stocGradAscent1(dataMatIn, classLabels, numIter=150):
+    m, n = shape(dataMatIn)
+    weights = ones(n)
+    for j in range(numIter):
+        dataIndex = range(m)
+        for i in range(m):
+            alpha = 4 / (1.0 + j + i) + 0.01
+            randIndex = int(random.uniform(0, len(dataIndex)))
+            h = sigmoid(sum(dataMatIn[randIndex] * weights))
+            error = classLabels[randIndex] - h
+            weights = weights + alpha * error * dataMatIn[randIndex]
+            del (dataIndex[randIndex])
+    return weights
+
+
 # 画出数据集和logistic回归最佳拟合直线
 def plotBestFit():
     dataMat, labelMat = loadDataSet()
-    weights = gradAscent(dataMat, labelMat).getA()
+    # weights = gradAscent(dataMat, labelMat).getA()
+    # weights = stocGradAscent0(array(dataMat), labelMat)
+    weights = stocGradAscent1(array(dataMat), labelMat, 500)
     dataArr = array(dataMat)
     n = shape(dataArr)[0]
     xcord1 = []
