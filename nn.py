@@ -21,8 +21,8 @@ xs = tf.placeholder(tf.float32, [None, 1])
 ys = tf.placeholder(tf.float32, [None, 1])
 
 l1 = add_layer(xs, 1, 10, activation_function=tf.nn.relu)
-l2 = add_layer(l1, 10, 3, activation_function=tf.nn.relu)
-prediction = add_layer(l2, 3, 1, activation_function=None)
+l2 = add_layer(l1, 10, 10, activation_function=tf.nn.sigmoid)
+prediction = add_layer(l2, 10, 1, activation_function=None)
 
 loss = tf.reduce_mean(tf.reduce_sum(tf.square(ys - prediction),
                                     reduction_indices=[1]))

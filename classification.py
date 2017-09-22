@@ -1,4 +1,5 @@
 import tensorflow as tf
+import numpy as np
 from tensorflow.examples.tutorials.mnist import input_data
 
 mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
@@ -25,6 +26,24 @@ def compute_accuracy(v_xs, v_ys):
     return result
 
 
+def weight_variable(shape):
+    init = tf.truncated_normal(shape, stddev=0.1)
+    return tf.Variable(init)
+
+
+def bias_variable(shape):
+    init = tf.constant(0.1, shape=shape)
+    return tf.Variable(init)
+
+
+def conv2d(x, W):
+    return tf.nn.conv2d(x, W, strides=[1, 1, 1, 1], padding='SAME')
+
+
+def max_pool_2x2(x):
+    return tf.nn.max_pool(x, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
+
+
 xs = tf.placeholder(tf.float32, [None, 784])
 ys = tf.placeholder(tf.float32, [None, 10])
 
@@ -33,8 +52,9 @@ ys = tf.placeholder(tf.float32, [None, 10])
 # cross_entropy = tf.nn.softmax_cross_entropy_with_logits(labels=ys,logits = prediction)
 
 # implement without cross_entropy api
-# layer1 = add_layer(xs, 784, 8, activation_function=None)
+# l1 = add_layer(xs, 784, 2, activation_function=tf.nn.relu)
 prediction = add_layer(xs, 784, 10, activation_function=tf.nn.softmax)
+
 cross_entropy = tf.reduce_mean(-tf.reduce_sum(ys * tf.log(prediction), reduction_indices=[1]))
 
 train = tf.train.GradientDescentOptimizer(0.5).minimize(cross_entropy)

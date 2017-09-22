@@ -29,7 +29,8 @@ with tf.name_scope('inputs'):
     ys = tf.placeholder(tf.float32, [None, 1], name='y_input')
 
 l1 = add_layer(1, xs, 1, 10, activation_function=tf.nn.relu)
-prediction = add_layer(2, l1, 10, 1, activation_function=None)
+l2 = add_layer(2, l1, 10, 10, activation_function=tf.nn.relu)
+prediction = add_layer(3, l2, 10, 1, activation_function=None)
 
 with tf.name_scope('loss'):
     loss = tf.reduce_mean(tf.reduce_sum(tf.square(ys - prediction),
