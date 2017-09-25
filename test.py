@@ -1,10 +1,9 @@
 import numpy as np
 import math
 
-X = np.array([[0,0,1],[0,1,1],[1,0,1],[1,1,1]])
-y = np.array([[0,1,1,0]]).T
+X = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]])
+X = np.reshape(X, [-1, 3])
 
-syn0 = 2*np.random.random((3,4))-1
-syn1 = 2*np.random.random((4,1))-1
+a = np.arange(1, 20)
 
-print(np.dot(X,syn0))
+print(a)
