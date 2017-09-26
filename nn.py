@@ -1,12 +1,34 @@
+# -*- coding:utf-8 -*-
+
 import tensorflow as tf
 import numpy as np
 import matplotlib.pyplot as plt
+
+ema = tf.train.ExponentialMovingAverage(decay=0.5)
 
 
 def add_layer(inputs, in_size, out_size, activation_function=None):
     W = tf.Variable(tf.random_normal([in_size, out_size]))
     b = tf.Variable(tf.zeros([1, out_size])) + 0.1
     z = tf.matmul(inputs, W) + b
+
+    # batch normalization
+    batch_mean, batch_var = tf.nn.moments(z, axes=[0])  # [0] for batch. for image axes=[0,1,2] [batch,height,width]
+    scale = tf.Variable(tf.ones([out_size]))
+    offset = tf.Variable(tf.zeros([out_size]))
+    epsilon = 0.001
+
+    def mean_var_with_update():
+        # 保存每一批的均值和方差
+        ema_apply = ema.apply([batch_mean, batch_var])
+        # 控制必须在保存之后
+        with tf.control_dependencies([ema_apply]):
+            return tf.identity(batch_mean), tf.identity(batch_var)
+
+    mean, var = mean_var_with_update()
+
+    z = tf.nn.batch_normalization(z, mean=mean, variance=var, offset=offset, scale=scale, variance_epsilon=epsilon)
+
     if activation_function is None:
         a = z
     else:
@@ -51,4 +73,3 @@ for i in range(1000):
         prediction_value = session.run(prediction, feed_dict={xs: x_data, ys: y_data})
         lines = ax.plot(x_data, prediction_value, 'r-', lw=5)
         plt.pause(0.1)
-
