@@ -4,10 +4,10 @@ import tensorflow as tf
 import numpy as np
 import matplotlib.pyplot as plt
 
-ema = tf.train.ExponentialMovingAverage(decay=0.5)
-
 
 def add_layer(inputs, in_size, out_size, activation_function=None):
+    ema = tf.train.ExponentialMovingAverage(decay=0.5)
+
     W = tf.Variable(tf.random_normal([in_size, out_size]))
     b = tf.Variable(tf.zeros([1, out_size])) + 0.1
     z = tf.matmul(inputs, W) + b
