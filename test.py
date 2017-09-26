@@ -8,21 +8,28 @@ is_test = tf.placeholder(tf.bool)
 
 def batch_run(_x, _is_test):
     ema = tf.train.ExponentialMovingAverage(decay=0.5)
-
-    _mean, _var = tf.nn.moments(_x, axes=[0, 1])
-
-    ema.apply([_mean, _var])
+    _mean, _var = tf.nn.moments(x, axes=[0, 1])
 
     def mean_update():
-        # ema_apply_oper = ema.apply([_mean, _var])
-        # with tf.control_dependencies([ema_apply_oper]):
-        return _mean
+        ema_apply_oper = ema.apply([_mean, _var])
+        with tf.control_dependencies([ema_apply_oper]):
+            return tf.identity(_mean)
 
     def m_mean():
         return ema.average(_mean) or 99.0
 
     return tf.cond(_is_test, m_mean, mean_update)
 
+
+'''
+ema = tf.train.ExponentialMovingAverage(decay=0.5)
+_mean, _var = tf.nn.moments(x, axes=[0, 1])
+
+ema_apply_oper = ema.apply([_mean, _var])
+
+with tf.control_dependencies([ema_apply_oper]):
+    mean = tf.cond(is_test, lambda: ema.average(_mean), lambda: _mean)
+'''
 
 mean = batch_run(x, is_test)
 
