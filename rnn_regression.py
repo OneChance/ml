@@ -10,7 +10,7 @@ BATCH_SIZE = 50
 INPUT_SIZE = 1
 OUTPUT_SIZE = 1
 CELL_SIZE = 10
-LR = 0.006
+LR = 0.01
 
 
 def get_batch():
@@ -22,7 +22,7 @@ def get_batch():
     BATCH_START += TIME_STEPS
     # plt.plot(xs[0, :], res[0, :], 'r', xs[0, :], seq[0, :], 'b--')
     # plt.show()
-    # returned seq, res and xs: shape (batch, step, input)
+    # 加上一个轴,维度为1
     return [_seq[:, :, np.newaxis], _res[:, :, np.newaxis], _xs]
 
 
@@ -36,8 +36,6 @@ class LSTMRNN(object):
         with tf.name_scope('inputs'):
             self.xs = tf.placeholder(tf.float32, [None, n_steps, input_size], name='xs')
             self.ys = tf.placeholder(tf.float32, [None, n_steps, output_size], name='ys')
-        with tf.variable_scope('in_hidden'):
-            self.add_input_layer()
         with tf.variable_scope('LSTM_cell'):
             self.add_cell()
         with tf.variable_scope('out_hidden'):
@@ -45,67 +43,25 @@ class LSTMRNN(object):
         with tf.name_scope('cost'):
             self.compute_cost()
         with tf.name_scope('train'):
-            self.train_op = tf.train.AdamOptimizer(LR).minimize(self.cost)
-
-    def add_input_layer(self, ):
-        l_in_x = tf.reshape(self.xs, [-1, self.input_size], name='2_2D')  # (batch*n_step, in_size)
-        # Ws (in_size, cell_size)
-        Ws_in = self._weight_variable([self.input_size, self.cell_size])
-        # bs (cell_size, )
-        bs_in = self._bias_variable([self.cell_size])
-        # l_in_y = (batch * n_steps, cell_size)
-        with tf.name_scope('Wx_plus_b'):
-            l_in_y = tf.matmul(l_in_x, Ws_in) + bs_in
-        # reshape l_in_y ==> (batch, n_steps, cell_size)
-        self.l_in_y = tf.reshape(l_in_y, [-1, self.n_steps, self.cell_size], name='2_3D')
+            self.train_op = tf.train.AdamOptimizer(LR).minimize(self.loss)
 
     def add_cell(self):
-        lstm_cell = tf.contrib.rnn.BasicLSTMCell(self.cell_size, forget_bias=1.0, state_is_tuple=True)
+        lstm_cell = tf.contrib.rnn.BasicRNNCell(num_units=CELL_SIZE)
         with tf.name_scope('initial_state'):
             self.cell_init_state = lstm_cell.zero_state(self.batch_size, dtype=tf.float32)
         self.cell_outputs, self.cell_final_state = tf.nn.dynamic_rnn(
-            lstm_cell, self.l_in_y, initial_state=self.cell_init_state, time_major=False)
+            lstm_cell, self.xs, initial_state=self.cell_init_state, time_major=False)
 
     def add_output_layer(self):
-        # shape = (batch * steps, cell_size)
-        # 这里和分类不一样,分类对于一次循环下来的结果，只需要最后一个输出值(一张图片的28行，只输出一个类别)
-        # 而这里预测的是线性结果,每一个x都需要对应的输出y,所以这里不做unpack
         l_out_x = tf.reshape(self.cell_outputs, [-1, self.cell_size], name='2_2D')
-        Ws_out = self._weight_variable([self.cell_size, self.output_size])
-        bs_out = self._bias_variable([self.output_size, ])
-        # shape = (batch * steps, output_size)
         with tf.name_scope('Wx_plus_b'):
-            self.pred = tf.matmul(l_out_x, Ws_out) + bs_out
+            outs = tf.layers.dense(l_out_x, OUTPUT_SIZE)
+            self.pred = tf.reshape(outs, [-1, self.n_steps, self.output_size])
 
     def compute_cost(self):
-        losses = tf.contrib.legacy_seq2seq.sequence_loss_by_example(
-            [tf.reshape(self.pred, [-1], name='reshape_pred')],
-            [tf.reshape(self.ys, [-1], name='reshape_target')],
-            [tf.ones([self.batch_size * self.n_steps], dtype=tf.float32)],
-            average_across_timesteps=True,
-            softmax_loss_function=self.ms_error,
-            name='losses'
-        )
         with tf.name_scope('average_cost'):
-            self.cost = tf.div(
-                tf.reduce_sum(losses, name='losses_sum'),
-                self.batch_size,
-                name='average_cost')
-            tf.summary.scalar('cost', self.cost)
-
-    @staticmethod
-    def ms_error(labels, logits):
-        return tf.square(tf.subtract(labels, logits))
-
-    @staticmethod
-    def _weight_variable(shape, name='weights'):
-        initializer = tf.random_normal_initializer(mean=0., stddev=1., )
-        return tf.get_variable(shape=shape, initializer=initializer, name=name)
-
-    @staticmethod
-    def _bias_variable(shape, name='biases'):
-        initializer = tf.constant_initializer(0.1)
-        return tf.get_variable(name=name, shape=shape, initializer=initializer)
+            self.loss = tf.losses.mean_squared_error(labels=self.ys, predictions=self.pred)
+            tf.summary.scalar('loss', self.loss)
 
 
 if __name__ == '__main__':
@@ -116,9 +72,6 @@ if __name__ == '__main__':
     init = tf.global_variables_initializer()
     sess.run(init)
 
-    # relocate to the local dir and run this line to view it on Chrome (http://0.0.0.0:6006/):
-    # $ tensorboard --logdir='logs'
-
     plt.ion()
     plt.show()
     for i in range(200):
@@ -126,18 +79,17 @@ if __name__ == '__main__':
         if i == 0:
             feed_dict = {
                 model.xs: seq,
-                model.ys: res,
-                # create initial state
+                model.ys: res
             }
         else:
             feed_dict = {
                 model.xs: seq,
                 model.ys: res,
-                model.cell_init_state: state  # use last state as the initial state for this run
+                model.cell_init_state: state  # 使用前一批训练的state做为初始化state
             }
 
         _, cost, state, pred = sess.run(
-            [model.train_op, model.cost, model.cell_final_state, model.pred],
+            [model.train_op, model.loss, model.cell_final_state, model.pred],
             feed_dict=feed_dict)
 
         # plotting

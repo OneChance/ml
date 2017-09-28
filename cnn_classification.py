@@ -11,7 +11,7 @@ mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
 
 xs = tf.placeholder(tf.float32, [None, 784])
 ys = tf.placeholder(tf.float32, [None, 10])
-keep_prob = tf.placeholder(tf.float32)
+is_train = tf.placeholder(tf.bool, None)
 
 x_image = tf.reshape(xs, [-1, 28, 28, 1])
 
@@ -27,8 +27,17 @@ pool2 = tf.layers.max_pooling2d(conv2, 2, 2)
 # 池化输出扁平化,作为全连接层的输入
 flat = tf.reshape(pool2, [-1, 7 * 7 * 64])
 layer1 = tf.layers.dense(flat, 256, activation=tf.nn.relu)
+# dropout
+layer1 = tf.layers.dropout(layer1, rate=0.5, training=is_train)
+# batch-normalization(此处灰度图片数据集输入已经是0到1之间的数,所以做batch-normalization效果反而不好)
+# layer1 = tf.layers.batch_normalization(layer1, training=is_train)
+layer2 = tf.layers.dense(layer1, 300, activation=tf.nn.relu)
+# dropout
+layer2 = tf.layers.dropout(layer2, rate=0.5, training=is_train)
+# batch-normalization
+# layer1 = tf.layers.batch_normalization(layer1, training=is_train)
 # 下面计算交叉熵时,会应用softmax,所以此层不使用激励函数
-prediction = tf.layers.dense(layer1, 10)
+prediction = tf.layers.dense(layer2, 10)
 
 loss = tf.losses.softmax_cross_entropy(onehot_labels=ys, logits=prediction)
 
@@ -45,7 +54,9 @@ session.run(init)
 
 for i in range(1000):
     batch_xs, batch_ys = mnist.train.next_batch(100)
-    session.run(train, feed_dict={xs: batch_xs, ys: batch_ys})
+    session.run(train, feed_dict={xs: batch_xs, ys: batch_ys, is_train: True})
     if i % 50 == 0:
-        accuracy_, loss_ = session.run([accuracy, loss], feed_dict={xs: batch_xs, ys: batch_ys})
+        accuracy_, loss_ = session.run([accuracy, loss],
+                                       feed_dict={xs: mnist.test.images[:300], ys: mnist.test.labels[:300],
+                                                  is_train: False})
         print(accuracy_, loss_)

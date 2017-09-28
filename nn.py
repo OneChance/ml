@@ -13,8 +13,9 @@ y_data = np.square(x_data) - 0.5 + noise
 
 xs = tf.placeholder(tf.float32, x_data.shape)
 ys = tf.placeholder(tf.float32, y_data.shape)
+is_train = tf.placeholder(tf.bool, None)
 
-# 添加一个隐藏层
+# 添加隐藏层
 l1 = tf.layers.dense(xs, 10, tf.nn.relu)
 prediction = tf.layers.dense(l1, 1)
 
