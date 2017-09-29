@@ -33,7 +33,7 @@ def classify0(inX, dataSet, labels, kk):
         classCount[voteIlabel] = classCount.get(voteIlabel, 0) + 1
 
     # 按value值倒序排列
-    sortedClassCount = sorted(classCount.iteritems(), key=operator.itemgetter(1), reverse=True)
+    sortedClassCount = sorted(classCount.items(), key=operator.itemgetter(1), reverse=True)
     # 返回出现次数最多的标签
     return sortedClassCount[0][0]
 
@@ -89,23 +89,23 @@ def test():
     errorCount = 0.0
     for i in range(numTestVecs):
         classifierResult = classify0(normMat[i, :], normMat[numTestVecs:m, :], typeLabels, 10)
-        print "type is:", classifierResult
+        print("type is:", classifierResult)
         if classifierResult != typeLabels[i]:
             errorCount += 1
-    print "error rate is:", (errorCount / float(numTestVecs))
+    print("error rate is:", (errorCount / float(numTestVecs)))
 
 
 # 分类函数
 def classifyPerson():
     resultList = ['喜欢', '没啥感觉', '讨厌']
-    sportInWeek = int(raw_input("一周运动几小时?"))
-    gameInWeek = int(raw_input("一周玩电脑游戏几小时?"))
-    readInWeek = int(raw_input("一周读书几小时?"))
+    sportInWeek = int(input("一周运动几小时?"))
+    gameInWeek = int(input("一周玩电脑游戏几小时?"))
+    readInWeek = int(input("一周读书几小时?"))
     timeMat, typeLabels = file2matrix('knndata.txt')
     normMat, ranges, minVals = autoNorm(timeMat)
     inArr = array([sportInWeek, gameInWeek, readInWeek])
     classifierResult = classify0((inArr - minVals) / ranges, normMat, typeLabels, 10)
-    print resultList[classifierResult - 1]
+    print(resultList[classifierResult - 1])
 
 
 classifyPerson()

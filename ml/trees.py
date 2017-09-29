@@ -1,10 +1,11 @@
 # -*- coding:utf-8 -*-
 # 决策树Demo
 
-from math import log
 import operator
-import treePlotter
 import pickle
+from math import log
+
+import treePlotter
 
 
 def createDataSet():
