@@ -11,15 +11,19 @@ class Env:
     def __init__(self):
         self.states = N_STATE
         self.actions = ACTIONS
+        # 状态的维度(这里用1维的整数即可表示每一种可能的状态:0-5),用于确定神经网络输入参数维度
+        self.n_features = 1
 
     def reset(self):
         self.S = 0
 
     def step(self, A):
         done = False
-        if A == 'right':
+        # if A == 'right':
+        if A == 1:  # for dqn
             if self.S == self.states - 2:
-                S_ = 'terminal'
+                # S_ = 'terminal'
+                S_ = -1  # for dqn
                 R = 1
                 done = True
             else:
@@ -35,7 +39,8 @@ class Env:
 
     def render(self, episode, step_counter):
         env_list = ['-'] * (self.states - 1) + ['T']
-        if self.S == 'terminal':
+        # if self.S == 'terminal':
+        if self.S == -1:  # for dqn
             interaction = '第%s代：找到宝藏用了%s步' % (episode + 1, step_counter)
             print('\r{}'.format(interaction))
             time.sleep(2)
