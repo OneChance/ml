@@ -2,7 +2,7 @@
 from env import Env
 from rl_brain import QLearning, Sarsa, SarsaLambda, DeepQNetwork
 
-MAX_EPISODES = 300  # 训练13代
+MAX_EPISODES = 40  # 训练次数
 
 
 # q-learning
@@ -91,5 +91,5 @@ learning = DeepQNetwork(env.actions,
                         reword_decay=0.9,
                         e_greedy=0.9,
                         replace_target_iter=200,
-                        memory_size=2000)
+                        memory_size=500)
 dqn_train()

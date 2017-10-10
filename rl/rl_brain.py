@@ -3,6 +3,7 @@
 import numpy as np
 import pandas as pd
 import tensorflow as tf
+import matplotlib.pyplot as plt
 
 np.random.seed(1)
 tf.set_random_seed(1)
@@ -141,8 +142,7 @@ class DeepQNetwork:
     def _build_net(self):
         self.s = tf.placeholder(tf.float32, [None, self.n_features], name='s')  # 当前状态
         self.s_ = tf.placeholder(tf.float32, [None, self.n_features], name='s_')  # 下一步状态
-        self.r = tf.placeholder(tf.float32, [None, ], name='r')  # input Reward
-        self.a = tf.placeholder(tf.int32, [None, ], name='a')  # 行为样本,[batch_size,1]
+        self.q_target = tf.placeholder(tf.float32, [None, len(self.n_actions)], name='Q_target')
 
         w_initializer, b_initializer = tf.random_normal_initializer(0., 0.3), tf.constant_initializer(0.1)
 
@@ -160,18 +160,8 @@ class DeepQNetwork:
             self.q_next = tf.layers.dense(t1, len(self.n_actions), kernel_initializer=w_initializer,
                                           bias_initializer=b_initializer)
 
-        # q-learning
-        # 选出Q值最大的行为[batch_size,1]
-        q_target = self.r + self.gamma * tf.reduce_max(self.q_next, axis=1)
-        self.q_target = tf.stop_gradient(q_target)
-        # self.a:[1,batch_size] 从样本中抽取的行为样本,每一个样本内容是某状态下选择的行为的索引
-        # stack方法为a加上索引(这里其实也就是样本序号),用于后面的gather_nd操作：
-        # 其中range输出为[0,1,......,batch_size-1]的索引
-        a_indices = tf.stack([tf.range(tf.shape(self.a)[0], dtype=tf.int32), self.a], axis=1)
-        # 根据序号对应的行为索引,取出q估计结果中对应位置的行为 [batch_size,1]
-        self.q_eval_wrt_a = tf.gather_nd(params=self.q_eval, indices=a_indices)
-
-        self.loss = tf.losses.mean_squared_error(self.q_target, self.q_eval_wrt_a)
+        # 由于误差计算使用的q_target是传入的,所以只有计算q_eval的网络会学习
+        self.loss = tf.losses.mean_squared_error(self.q_target, self.q_eval)
         self._train_op = tf.train.RMSPropOptimizer(self.lr).minimize(self.loss)
 
     def store_transition(self, s, a, r, s_):
@@ -195,18 +185,34 @@ class DeepQNetwork:
         if self.learn_step_counter % self.replace_target_iter == 0:
             # 将q估计网络学习的参数复制给q现实网络
             self.sess.run(self.target_replace_op)
+
+        # 随机抽取经历,打乱相关性,提升学习效率
         if self.memory_counter > self.memory_size:
             sample_index = np.random.choice(self.memory_size, size=self.batch_size)
         else:
             sample_index = np.random.choice(self.memory_counter, size=self.batch_size)
         batch_memory = self.memory[sample_index, :]
 
+        q_eval, q_next = self.sess.run(
+            [self.q_eval, self.q_next],
+            feed_dict={
+                self.s: batch_memory[:, :self.n_features],
+                self.s_: batch_memory[:, -self.n_features:]
+            })
+
+        q_target = q_eval.copy()
+
+        batch_index = np.arange(self.batch_size, dtype=np.int32)
+        eval_act_index = batch_memory[:, self.n_features].astype(int)
+        reward = batch_memory[:, self.n_features + 1]
+
+        # q_target只更新样本中对应动作的Q值,这样q_target-q_eval计算的误差,就只有对应动作的q值误差
+        q_target[batch_index, eval_act_index] = reward + self.gamma * np.max(q_next, axis=1)
+
         _, cost = self.sess.run([self._train_op, self.loss],
                                 feed_dict={
                                     self.s: batch_memory[:, :self.n_features],  # [batch_size,1]
-                                    self.a: batch_memory[:, self.n_features],
-                                    self.r: batch_memory[:, self.n_features + 1],
-                                    self.s_: batch_memory[:, -self.n_features:]  # :会转化为列向量
+                                    self.q_target: q_target
                                 })
         self.cost_his.append(cost)
 
@@ -215,7 +221,6 @@ class DeepQNetwork:
         self.learn_step_counter += 1
 
     def plot_cost(self):
-        import matplotlib.pyplot as plt
         plt.plot(np.arange(len(self.cost_his)), self.cost_his)
         plt.ylabel('Cost')
         plt.xlabel('steps')
