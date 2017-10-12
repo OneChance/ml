@@ -85,11 +85,11 @@ env = Env()
 # s_train()
 # print(learning.q_tables)
 
-learning = DeepQNetwork(env.actions,
+learning = DeepQNetwork(len(env.actions),
                         env.n_features,
                         learning_rate=0.01,
                         reword_decay=0.9,
                         e_greedy=0.9,
                         replace_target_iter=200,
-                        memory_size=500)
+                        memory_size=2000)
 dqn_train()

@@ -5,8 +5,8 @@ import pandas as pd
 import tensorflow as tf
 import matplotlib.pyplot as plt
 
-np.random.seed(1)
-tf.set_random_seed(1)
+# np.random.seed(1)
+# tf.set_random_seed(1)
 
 EPSILON = 0.9  # 10%的动作选择是随机的
 ALPHA = 0.1  # 学习速率
@@ -100,6 +100,30 @@ class SarsaLambda(RL):
         self.eligibility_trace *= GAMMA * self.lambda_
 
 
+class SumTree(object):
+    data_pointer = 0
+
+    def __init__(self, capacity):
+        self.capacity = capacity
+        # 记录优先级
+        self.tree = np.zeros(2 * capacity - 1)
+        # 记录具体数据
+        self.data = np.zeros(capacity, dtype=object)
+
+    def add(self, p, data):
+        tree_idx = self.data_pointer + self.capacity - 1
+        self.data[self.data_pointer] = data
+        self.update(tree_idx, p)
+
+        self.data_pointer += 1
+        # 写满就覆盖
+        if self.data_pointer >= self.capacity:
+            self.data_pointer = 0
+
+    def update(self, tree_idx, p):
+        change = p - self.tree[tree_idx]
+
+
 # DQN
 class DeepQNetwork:
     def __init__(self, n_actions,
@@ -142,7 +166,7 @@ class DeepQNetwork:
     def _build_net(self):
         self.s = tf.placeholder(tf.float32, [None, self.n_features], name='s')  # 当前状态
         self.s_ = tf.placeholder(tf.float32, [None, self.n_features], name='s_')  # 下一步状态
-        self.q_target = tf.placeholder(tf.float32, [None, len(self.n_actions)], name='Q_target')
+        self.q_target = tf.placeholder(tf.float32, [None, self.n_actions], name='Q_target')
 
         w_initializer, b_initializer = tf.random_normal_initializer(0., 0.3), tf.constant_initializer(0.1)
 
@@ -150,14 +174,14 @@ class DeepQNetwork:
         with tf.variable_scope('eval_net'):
             e1 = tf.layers.dense(self.s, 20, tf.nn.relu, kernel_initializer=w_initializer,
                                  bias_initializer=b_initializer)
-            self.q_eval = tf.layers.dense(e1, len(self.n_actions), kernel_initializer=w_initializer,
+            self.q_eval = tf.layers.dense(e1, self.n_actions, kernel_initializer=w_initializer,
                                           bias_initializer=b_initializer)
 
         # q现实网络
         with tf.variable_scope('target_net'):
             t1 = tf.layers.dense(self.s_, 20, tf.nn.relu, kernel_initializer=w_initializer,
                                  bias_initializer=b_initializer)
-            self.q_next = tf.layers.dense(t1, len(self.n_actions), kernel_initializer=w_initializer,
+            self.q_next = tf.layers.dense(t1, self.n_actions, kernel_initializer=w_initializer,
                                           bias_initializer=b_initializer)
 
         # 由于误差计算使用的q_target是传入的,所以只有计算q_eval的网络会学习
@@ -178,7 +202,7 @@ class DeepQNetwork:
             action_value = self.sess.run(self.q_eval, feed_dict={self.s: observation})
             action = np.argmax(action_value)
         else:
-            action = np.random.randint(0, len(self.n_actions))
+            action = np.random.randint(0, self.n_actions)
         return action
 
     def learn(self):
@@ -193,21 +217,35 @@ class DeepQNetwork:
             sample_index = np.random.choice(self.memory_counter, size=self.batch_size)
         batch_memory = self.memory[sample_index, :]
 
-        q_eval, q_next = self.sess.run(
-            [self.q_eval, self.q_next],
+        # 分别在两个网络上跑下一个observation(state)
+        q_next, q_eval_next = self.sess.run(
+            [self.q_next, self.q_eval],
             feed_dict={
-                self.s: batch_memory[:, :self.n_features],
-                self.s_: batch_memory[:, -self.n_features:]
+                self.s_: batch_memory[:, -self.n_features:],
+                self.s: batch_memory[:, -self.n_features:]
+            })
+
+        q_eval = self.sess.run(
+            self.q_eval,
+            feed_dict={
+                self.s: batch_memory[:, :self.n_features]
             })
 
         q_target = q_eval.copy()
 
         batch_index = np.arange(self.batch_size, dtype=np.int32)
+        # 取行为那一列,每个元素为行为的索引
         eval_act_index = batch_memory[:, self.n_features].astype(int)
         reward = batch_memory[:, self.n_features + 1]
 
+        # dqn的q_target计算是在q现实网络计算出的结果中选取最大q值,这样可能会造成q值估计过高
+        # q_t = reward + self.gamma * np.max(q_next, axis=1)
+        # 所以double dqn是先获得q估计网络计算出的结果的最大q值的索引,然后取q现实网络计算结果中,该索引对应位置的q值
+        max_q_eval_next_index = np.argmax(q_eval_next, axis=1)
+        q_t = reward + self.gamma * q_next[batch_index, max_q_eval_next_index]
+
         # q_target只更新样本中对应动作的Q值,这样q_target-q_eval计算的误差,就只有对应动作的q值误差
-        q_target[batch_index, eval_act_index] = reward + self.gamma * np.max(q_next, axis=1)
+        q_target[batch_index, eval_act_index] = q_t
 
         _, cost = self.sess.run([self._train_op, self.loss],
                                 feed_dict={

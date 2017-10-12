@@ -2,7 +2,7 @@
 
 import time
 
-N_STATE = 6  # 6个状态
+N_STATE = 6  # 状态数
 ACTIONS = ["left", "right"]  # 可选择的动作
 FRESH_TIME = 0.3  # 画面刷新时间
 
