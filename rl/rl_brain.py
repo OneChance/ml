@@ -111,6 +111,7 @@ class SumTree(object):
         self.data = np.zeros(capacity, dtype=object)
 
     def add(self, p, data):
+        # 数据节点对应的树节点
         tree_idx = self.data_pointer + self.capacity - 1
         self.data[self.data_pointer] = data
         self.update(tree_idx, p)
@@ -122,6 +123,33 @@ class SumTree(object):
 
     def update(self, tree_idx, p):
         change = p - self.tree[tree_idx]
+        self.tree[tree_idx] = p
+        while tree_idx != 0:
+            tree_idx = (tree_idx - 1) // 2
+            self.tree[tree_idx] += change
+
+    def get_leaf(self, v):
+        parent_idx = 0
+        while True:
+            cl_idx = 2 * parent_idx + 1
+            cr_idx = cl_idx + 1
+            if cl_idx >= len(self.tree):  # parent_idx已是叶子节点,跳出循环
+                leaf_idx = parent_idx
+                break
+            else:
+                if v <= self.tree[cl_idx]:
+                    parent_idx = cl_idx
+                else:
+                    v -= self.tree[cl_idx]
+                    parent_idx = cr_idx
+
+        # 树索引转换成数据索引
+        data_idx = leaf_idx - self.capacity + 1
+        return leaf_idx, self.tree[leaf_idx], self.data[data_idx]
+
+    @property
+    def total_p(self):
+        return self.tree[0]
 
 
 # DQN
