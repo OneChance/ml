@@ -5,8 +5,8 @@ import pandas as pd
 import tensorflow as tf
 import matplotlib.pyplot as plt
 
-# np.random.seed(1)
-# tf.set_random_seed(1)
+np.random.seed(1)
+tf.set_random_seed(1)
 
 EPSILON = 0.9  # 10%的动作选择是随机的
 ALPHA = 0.1  # 学习速率
@@ -152,6 +152,70 @@ class SumTree(object):
         return self.tree[0]
 
 
+class Memory(object):
+    """
+    超参数alpha和beta的选择是相互作用的,增加alpha会使得概率抽样选择更积极,增加beta会使得对这种选择带来的偏差的修正更强力
+    """
+    epsilon = 0.01
+    """
+    alpha决定了优先级的使用程度,当alpha为0时,退化成简单的随机抽样
+    alpha的幂计算使得抽样概率符合幂律分布,也就是说只有少数行为值得被多次抽样
+    """
+    alpha = 0.6
+    """
+    prioritized改变了更新值的分布,这导致最终收敛的值发生偏差,所以使用ISWeights来修正
+    当beta=1时,完全补偿这种偏差
+    因为使用了prioritized,使得造成误差更大的经验更频繁的被选择,这对于梯度算法来说,相当于下降的梯度
+    很大,ISWeights把这种一次下降一大步的方式转换成了多次小步幅下降,越到算法的后阶段,误差越小,所以这
+    种修正(beta)就算完全补偿,步伐也不会很大了
+    """
+    beta = 0.4
+    beta_increment_per_sampling = 0.001
+    abs_err_upper = 1
+
+    def __init__(self, capacity):
+        self.tree = SumTree(capacity)
+
+    def store(self, transition):
+        max_p = np.max(self.tree.tree[-self.tree.capacity])
+        if max_p == 0:
+            max_p = self.abs_err_upper
+        self.tree.add(max_p, transition)
+
+    def sample(self, n):
+        """
+        1.首先将总优先值划分为32个范围
+        2.从每个范围中采样一个值v
+        3.根据v值获取transition
+        在这个例子中,开始学习的时候记忆库中会有200个样本,这种选择方式(逐渐增大的v)可以保证选择的32个样本均匀的分布在200个样本中
+        这种抽样方法并不是要获取记忆库中误差最大的32个样本,而是对整个记忆库均匀的按划分的范围取范围中误差较大的样本
+        """
+
+        b_idx, b_memory, ISWeights = np.empty((n,), dtype=np.int32), np.empty((n, self.tree.data[0].size)), np.empty(
+            (n, 1))
+        pri_seg = self.tree.total_p / n
+        self.beta = np.min([1, self.beta + self.beta_increment_per_sampling])
+
+        max_prob = np.max(self.tree.tree[-self.tree.capacity]) / self.tree.total_p
+
+        for i in range(n):
+            a, b = pri_seg * i, pri_seg * (i + 1)
+            v = np.random.uniform(a, b)
+            idx, p, data = self.tree.get_leaf(v)
+            prob = p / self.tree.total_p
+            ISWeights[i, 0] = np.power(prob / max_prob, -self.beta)
+            b_idx[i], b_memory[i, :] = idx, data
+        return b_idx, b_memory, ISWeights
+
+    def batch_update(self, tree_idx, abs_errors):
+        # 避免误差为0,也就是避免该transition被再次选择的可能性为0,防止过拟合
+        abs_errors += self.epsilon
+        clipped_errors = np.minimum(abs_errors, self.abs_err_upper)
+        ps = np.power(clipped_errors, self.alpha)
+        for ti, p in zip(tree_idx, ps):
+            self.tree.update(ti, p)
+
+
 # DQN
 class DeepQNetwork:
     def __init__(self, n_actions,
@@ -178,7 +242,9 @@ class DeepQNetwork:
         self.learn_step_counter = 0
 
         # [s,a,r,s_] n_features*2是因为s和s_都有n_features个状态属性,另外2个维度是a,r
-        self.memory = np.zeros((self.memory_size, n_features * 2 + 2))
+        # self.memory = np.zeros((self.memory_size, n_features * 2 + 2))
+        # 基于prioritized的记忆库
+        self.memory = Memory(capacity=memory_size)
 
         self._build_net()
 
@@ -195,6 +261,7 @@ class DeepQNetwork:
         self.s = tf.placeholder(tf.float32, [None, self.n_features], name='s')  # 当前状态
         self.s_ = tf.placeholder(tf.float32, [None, self.n_features], name='s_')  # 下一步状态
         self.q_target = tf.placeholder(tf.float32, [None, self.n_actions], name='Q_target')
+        self.ISWeights = tf.placeholder(tf.float32, [None, 1], name='IS_weights')
 
         w_initializer, b_initializer = tf.random_normal_initializer(0., 0.3), tf.constant_initializer(0.1)
 
@@ -212,17 +279,27 @@ class DeepQNetwork:
             self.q_next = tf.layers.dense(t1, self.n_actions, kernel_initializer=w_initializer,
                                           bias_initializer=b_initializer)
 
+        """
         # 由于误差计算使用的q_target是传入的,所以只有计算q_eval的网络会学习
         self.loss = tf.losses.mean_squared_error(self.q_target, self.q_eval)
+        """
+        self.abs_errors = tf.reduce_sum(tf.abs(self.q_target - self.q_eval), axis=1)
+        self.loss = tf.reduce_mean(self.ISWeights * tf.squared_difference(self.q_target, self.q_eval))
+
         self._train_op = tf.train.RMSPropOptimizer(self.lr).minimize(self.loss)
 
     def store_transition(self, s, a, r, s_):
+        """
         if not hasattr(self, 'memory_counter'):
             self.memory_counter = 0
         transition = np.hstack((s, [a, r], s_))
         index = self.memory_counter % self.memory_size
         self.memory[index, :] = transition
         self.memory_counter += 1
+        """
+        # prioritized
+        transition = np.hstack((s, [a, r], s_))
+        self.memory.store(transition)
 
     def choose_action(self, observation):
         observation = [[observation]]
@@ -238,12 +315,16 @@ class DeepQNetwork:
             # 将q估计网络学习的参数复制给q现实网络
             self.sess.run(self.target_replace_op)
 
+        """
         # 随机抽取经历,打乱相关性,提升学习效率
         if self.memory_counter > self.memory_size:
             sample_index = np.random.choice(self.memory_size, size=self.batch_size)
         else:
             sample_index = np.random.choice(self.memory_counter, size=self.batch_size)
         batch_memory = self.memory[sample_index, :]
+        """
+        # prioritized
+        tree_idx, batch_memory, ISWeights = self.memory.sample(self.batch_size)
 
         # 分别在两个网络上跑下一个observation(state)
         q_next, q_eval_next = self.sess.run(
@@ -275,11 +356,21 @@ class DeepQNetwork:
         # q_target只更新样本中对应动作的Q值,这样q_target-q_eval计算的误差,就只有对应动作的q值误差
         q_target[batch_index, eval_act_index] = q_t
 
+        """
         _, cost = self.sess.run([self._train_op, self.loss],
                                 feed_dict={
                                     self.s: batch_memory[:, :self.n_features],  # [batch_size,1]
                                     self.q_target: q_target
                                 })
+        """
+        # prioritized
+        _, abs_errors, cost = self.sess.run([self._train_op, self.abs_errors, self.loss],
+                                            feed_dict={self.s: batch_memory[:, :self.n_features],
+                                                       self.q_target: q_target,
+                                                       self.ISWeights: ISWeights})
+
+        self.memory.batch_update(tree_idx, abs_errors)
+
         self.cost_his.append(cost)
 
         # 一开始由于没有记忆库的支持,大量的行为选择都是随机的,随着不断的学习,选择趋向于贪婪最优Q值
