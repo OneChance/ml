@@ -1,5 +1,7 @@
 import numpy as np
 import tensorflow as tf
 
-for i in range(32):
-    print(i)
+a = [0, 0, 0, 0, 1]
+a -= np.mean(a)
+a /= np.std(a)
+print(a)

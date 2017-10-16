@@ -258,6 +258,27 @@ class DeepQNetwork:
         self.cost_his = []
 
     def _build_net(self):
+
+        def build_layers(s, n_l1, _w_initializer, _b_initializer):
+            w1 = tf.get_variable('w1', [self.n_features, n_l1], initializer=_w_initializer)
+            b1 = tf.get_variable('b1', [1, n_l1], initializer=_b_initializer)
+            l1 = tf.nn.relu(tf.matmul(s, w1) + b1)
+
+            # Dueling DQN
+            # 到达状态所能获取的奖励
+            w2 = tf.get_variable('w2_v', [n_l1, 1], initializer=_w_initializer)
+            b2 = tf.get_variable('b2_v', [1, 1], initializer=_b_initializer)
+            self.V = tf.matmul(l1, w2) + b2
+
+            # 采取下一步行动所能获取的奖励
+            w2 = tf.get_variable('w2_a', [n_l1, self.n_actions], initializer=_w_initializer)
+            b2 = tf.get_variable('b2_a', [1, self.n_actions], initializer=_b_initializer)
+            self.A = tf.matmul(l1, w2) + b2
+
+            out = self.V + (self.A - tf.reduce_mean(self.A, axis=1, keep_dims=True))
+
+            return out
+
         self.s = tf.placeholder(tf.float32, [None, self.n_features], name='s')  # 当前状态
         self.s_ = tf.placeholder(tf.float32, [None, self.n_features], name='s_')  # 下一步状态
         self.q_target = tf.placeholder(tf.float32, [None, self.n_actions], name='Q_target')
@@ -267,17 +288,11 @@ class DeepQNetwork:
 
         # q估计网络
         with tf.variable_scope('eval_net'):
-            e1 = tf.layers.dense(self.s, 20, tf.nn.relu, kernel_initializer=w_initializer,
-                                 bias_initializer=b_initializer)
-            self.q_eval = tf.layers.dense(e1, self.n_actions, kernel_initializer=w_initializer,
-                                          bias_initializer=b_initializer)
+            self.q_eval = build_layers(self.s, 20, w_initializer, b_initializer)
 
         # q现实网络
         with tf.variable_scope('target_net'):
-            t1 = tf.layers.dense(self.s_, 20, tf.nn.relu, kernel_initializer=w_initializer,
-                                 bias_initializer=b_initializer)
-            self.q_next = tf.layers.dense(t1, self.n_actions, kernel_initializer=w_initializer,
-                                          bias_initializer=b_initializer)
+            self.q_next = build_layers(self.s, 20, w_initializer, b_initializer)
 
         """
         # 由于误差计算使用的q_target是传入的,所以只有计算q_eval的网络会学习
@@ -382,3 +397,84 @@ class DeepQNetwork:
         plt.ylabel('Cost')
         plt.xlabel('steps')
         plt.show()
+
+
+class PolicyGradient:
+    def __init__(self, n_actions, n_features, learning_rate=0.01, reward_decay=0.95):
+        self.n_actions = n_actions
+        self.n_features = n_features
+        self.lr = learning_rate
+        self.gamma = reward_decay
+
+        # 当前状态,选择的动作,获得的奖励
+        self.ep_obs, self.ep_as, self.ep_rs = [], [], []
+
+        self._build_net()
+
+        self.sess = tf.Session()
+
+        self.sess.run(tf.global_variables_initializer())
+
+    def _build_net(self):
+        self.tf_obs = tf.placeholder(tf.float32, [None, self.n_features])
+        self.tf_acts = tf.placeholder(tf.int32, [None, ])
+        self.tf_vt = tf.placeholder(tf.float32, [None, ])
+
+        layer = tf.layers.dense(
+            inputs=self.tf_obs,
+            units=10,
+            activation=tf.nn.tanh,
+            kernel_initializer=tf.random_normal_initializer(mean=0, stddev=0.3),
+            bias_initializer=tf.constant_initializer(0.1)
+        )
+
+        all_act = tf.layers.dense(
+            inputs=layer,
+            units=self.n_actions,
+            activation=None,
+            kernel_initializer=tf.random_normal_initializer(mean=0, stddev=0.3),
+            bias_initializer=tf.constant_initializer(0.1)
+        )
+
+        # 使用softmax将结果转换成概率（选择每一个行为的概率）
+        self.all_act_prob = tf.nn.softmax(all_act)
+        neg_log_prob = tf.reduce_sum(-tf.log(self.all_act_prob) * tf.one_hot(self.tf_acts, self.n_actions), axis=1)
+        loss = tf.reduce_mean(neg_log_prob * self.tf_vt)
+        self.train_op = tf.train.AdamOptimizer(self.lr).minimize(loss)
+
+    def choose_action(self, observation):
+        observation = [[observation]]
+        prob_weights = self.sess.run(self.all_act_prob, feed_dict={self.tf_obs: observation})
+        action = np.random.choice(range(prob_weights.shape[1]),
+                                  p=prob_weights.ravel())
+        return action
+
+    def store_transition(self, s, a, r):
+        self.ep_obs.append(s)
+        self.ep_as.append(a)
+        self.ep_rs.append(r)
+
+    def learn(self):
+        discounted_ep_rs_norm = self._discount_and_norm_rewards()
+
+        self.sess.run(self.train_op, feed_dict={
+            self.tf_obs: np.vstack(self.ep_obs),
+            self.tf_acts: np.array(self.ep_as),
+            self.tf_vt: discounted_ep_rs_norm,
+        })
+
+        self.ep_obs, self.ep_as, self.ep_rs = [], [], []
+        return discounted_ep_rs_norm
+
+    def _discount_and_norm_rewards(self):
+        discounted_ep_rs = np.zeros_like(self.ep_rs, dtype=np.float32)
+        running_add = 0
+        for t in reversed(range(0, len(self.ep_rs))):
+            # 最终获得的奖励值,在前一步的奖励计算中,逐步递减
+            running_add = running_add * self.gamma + self.ep_rs[t]
+            discounted_ep_rs[t] = running_add
+
+        # 归一化奖励值
+        discounted_ep_rs -= np.mean(discounted_ep_rs)
+        discounted_ep_rs /= np.std(discounted_ep_rs)
+        return discounted_ep_rs
