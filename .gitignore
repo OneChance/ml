@@ -2,3 +2,4 @@
 /logs
 train_result/
 *.pyc
+/rl/log

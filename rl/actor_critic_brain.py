@@ -114,7 +114,7 @@ class Critic(object):
 class ActorCritic(object):
     """
     actor_critic将两者结合,
-    即有actor可以基于连续无限动作做出选择（q-learning只能基于离散有限的动作选择,因为有max选择）的优点,
+    即有actor可以基于连续无限动作(比如说立杆子的游戏，可以对杆子施加一个力，大小在[-2,2]之间,这里有无限多个选择)做出选择（q-learning只能基于离散有限的动作选择,因为有max选择）的优点,
     又有q-learning单步学习的特性来提升学习效率,
     但是由于是通过连续的样本来学习,所以存在缺陷
     """

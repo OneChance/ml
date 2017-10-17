@@ -1,7 +1,5 @@
 import numpy as np
 import tensorflow as tf
+import multiprocessing
 
-a = [0, 0, 0, 0, 1]
-a -= np.mean(a)
-a /= np.std(a)
-print(a)
+print(multiprocessing.cpu_count())
