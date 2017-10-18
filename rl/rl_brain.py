@@ -265,12 +265,16 @@ class DeepQNetwork:
             l1 = tf.nn.relu(tf.matmul(s, w1) + b1)
 
             # Dueling DQN
-            # 到达状态所能获取的奖励
+            # DQN是直接输出状态S下采取动作A的价值
+            # Dueling DQN 则是将这个价值拆分 变成两个价值
+            # 考虑到现实中存在很多状态,不管采取什么动作,都不会发生状态的转变(比如乒乓球中球离开板子飞向障碍物的时候)
+            # 所以分开训练是有意义的
+            # 当前状态的价值
             w2 = tf.get_variable('w2_v', [n_l1, 1], initializer=_w_initializer)
             b2 = tf.get_variable('b2_v', [1, 1], initializer=_b_initializer)
             self.V = tf.matmul(l1, w2) + b2
 
-            # 采取下一步行动所能获取的奖励
+            # 选择动作的价值
             w2 = tf.get_variable('w2_a', [n_l1, self.n_actions], initializer=_w_initializer)
             b2 = tf.get_variable('b2_a', [1, self.n_actions], initializer=_b_initializer)
             self.A = tf.matmul(l1, w2) + b2
@@ -438,6 +442,8 @@ class PolicyGradient:
 
         # 使用softmax将结果转换成概率（选择每一个行为的概率）
         self.all_act_prob = tf.nn.softmax(all_act)
+        # 因为要最大化动作概率值，所以这里要最小化负的cost function，
+        # log函数使得概率越小的情况下，更新幅度越大，因为低概率动作产生不错的回报时，这种经验是值得被强化的
         neg_log_prob = tf.reduce_sum(-tf.log(self.all_act_prob) * tf.one_hot(self.tf_acts, self.n_actions), axis=1)
         loss = tf.reduce_mean(neg_log_prob * self.tf_vt)
         self.train_op = tf.train.AdamOptimizer(self.lr).minimize(loss)
