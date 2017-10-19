@@ -2,6 +2,8 @@
 from env import Env
 from rl_brain import QLearning, Sarsa, SarsaLambda, DeepQNetwork, PolicyGradient
 from actor_critic_brain import ActorCritic
+from ddpg import DDPG
+import numpy as np
 
 MAX_EPISODES = 100  # 训练次数
 
@@ -103,29 +105,26 @@ MAX_EPISODES = 100  # 训练次数
 #########################################################################################
 
 # actor-critic
-def ac_train():
-    for episode in range(MAX_EPISODES):
-        step_counter = 0
-        env.reset()
-        env.render(episode, step_counter)
-
-        while True:
-            A = actor_critic.actor.choose_action(env.S)
-            S_, R, done = env.step(A)
-
-            td_error = actor_critic.critic.learn(env.S, R, S_)
-            actor_critic.actor.learn(env.S, A, td_error)
-
-            env.S = S_
-            step_counter += 1
-
-            env.render(episode, step_counter)
-
-            if done:
-                break
-
-
-#########################################################################################
+# def ac_train():
+#     for episode in range(MAX_EPISODES):
+#         step_counter = 0
+#         env.reset()
+#         env.render(episode, step_counter)
+#
+#         while True:
+#             A = actor_critic.actor.choose_action(env.S)
+#             S_, R, done = env.step(A)
+#
+#             td_error = actor_critic.critic.learn(env.S, R, S_)
+#             actor_critic.actor.learn(env.S, A, td_error)
+#
+#             env.S = S_
+#             step_counter += 1
+#
+#             env.render(episode, step_counter)
+#
+#             if done:
+#                 break
 
 env = Env()
 
@@ -150,5 +149,5 @@ env = Env()
 # learning = PolicyGradient(len(env.actions), env.n_features, learning_rate=0.01, reward_decay=0.9)
 # pg_train()
 # -------------------------------------------------------------------
-actor_critic = ActorCritic(len(env.actions), env.n_features, lr=0.01, gamma=0.9)
-ac_train()
+# actor_critic = ActorCritic(len(env.actions), env.n_features, lr=0.01, gamma=0.9)
+# ac_train()

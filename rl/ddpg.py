@@ -8,6 +8,10 @@ tf.set_random_seed(1)
 
 
 class DDPG(object):
+    """
+    适用于连续动作
+    """
+
     def __init__(self, a_dim, s_dim, capacity, batch_size=32, gamma=0.9, lr_a=0.001, lr_c=0.002, tau=0.01):
         self.capacity = capacity
         self.batch_size = batch_size
@@ -28,7 +32,6 @@ class DDPG(object):
             self.a = self._build_a(self.S, scope='eval', trainable=True)
             a_ = self._build_a(self.S_, scope='target', trainable=False)
         with tf.variable_scope('Critic'):
-            # critic网络根据actor网络计算出的动作以及当前的状态,来计算q值误差（q_target-q）,从而学习
             q = self._build_c(self.S, self.a, scope='eval', trainable=True)
             q_ = self._build_c(self.S_, a_, scope='target', trainable=False)
 
@@ -37,15 +40,17 @@ class DDPG(object):
         self.ce_params = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='Critic/eval')
         self.ct_params = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='Critic/target')
 
+        # 老的网络参数*(1-tau)+新的网络参数*tau
         self.soft_replace = [
             [tf.assign(ta, (1 - self.tau) * ta + self.tau * ea), tf.assign(tc, (1 - self.tau) * tc + self.tau * ec)]
             for ta, ea, tc, ec in zip(self.at_params, self.ae_params, self.ct_params, self.ce_params)]
 
         q_target = self.R + self.gamma * q_
-
+        # critic根据actor计算出的动作以及当前的状态,来计算q值误差（q_target-q）
         td_error = tf.losses.mean_squared_error(labels=q_target, predictions=q)
         self.ctrain = tf.train.AdamOptimizer(lr_c).minimize(td_error, var_list=self.ce_params)
 
+        # actor的动作给critic去评分得到q,这里要最大化评分q，所以加上负号
         a_loss = - tf.reduce_mean(q)
         self.atrain = tf.train.AdamOptimizer(lr_a).minimize(a_loss, var_list=self.ae_params)
 

@@ -30,6 +30,7 @@ def translateDNA(_pop):
 def select(_pop, _fitness):
     idx = np.random.choice(np.arange(POP_SIZE), size=POP_SIZE, replace=True,
                            p=_fitness / _fitness.sum())
+    print("idx:", idx)
     return _pop[idx]
 
 
